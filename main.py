@@ -1,6 +1,29 @@
 import argparse
 import os
 
+def createSets(eigenvec, setSize, outputFolder, outputName, logFile):
+
+    #Code from https://stackoverflow.com/questions/5452576/k-means-algorithm-variation-with-equal-cluster-size?rq=1
+    from sklearn.cluster import KMeans
+    from scipy.spatial.distance import cdist
+    from scipy.optimize import linear_sum_assignment
+    import numpy as np
+    import pandas as pd
+
+    X = pd.read_table(eigenvec, header=None, names=['IID', 'FID', 'PC1', 'PC2'], sep=" ", index_col="IID",
+                      usecols=['IID', 'PC1', 'PC2'])
+    n_clusters = int(np.ceil(len(X)/setSize))
+    kmeans = KMeans(n_clusters)
+    kmeans.fit(X)
+    centers = kmeans.cluster_centers_
+    centers = centers.reshape(-1, 1, X.shape[-1]).repeat(setSize, 1).reshape(-1, X.shape[-1])
+    distance_matrix = cdist(X, centers)
+    clusters = linear_sum_assignment(distance_matrix)[1]//setSize
+
+    X['ClusterID'] = clusters
+    X.to_csv(f"{outputFolder}/{outputName}_PCA_Cluster.csv")
+
+    return f"{outputFolder}/{outputName}_PCA_Cluster.csv"
 
 def phaseWithEagle(allSamplesVCF, referencePhase, outputFolder, begin, end, threads, geneticMap, eagle, logFile, run = True):
     for i in range(begin, end + 1):
@@ -26,11 +49,11 @@ def calculatePCAWithPlink(vcf, plink, folder, begin, end, outputName, logFile, r
     execute(f"{plink} --merge-list {folder}/ListToConcat.txt --make-bed --out {folder}/{outputName}_All", logFile, run)
     execute(f"{plink} --bfile {folder}/{outputName}_All --indep-pairwise 200 50 0.2 --out {folder}/{outputName}_LD",
             logFile, run)
-    execute(f"{plink} --bfile {folder}/{outputName}_All --extract {folder}/{outputName}_LD.in --make-bed --out "
+    execute(f"{plink} --bfile {folder}/{outputName}_All --extract {folder}/{outputName}_LD.prune.in --make-bed --out "
             f"{folder}/{outputName}_LD_Prunned", logFile, run)
     execute(f"{plink} --bfile {folder}/{outputName}_LD_Prunned --pca 2 --out {folder}/{outputName}_PCA", logFile, run)
 
-    return f'{folder}/{outputName}_PCA'
+    return f'{folder}/{outputName}_PCA.eigenvec'
 
 
 def mergeVCFs(vcf1, vcf2, bcftools, folder, begin, end, thread, logFile, run = True):
@@ -169,41 +192,43 @@ if __name__ == '__main__':
 
     # Aquecimento : mudando Bed bim fam para VCF
     if "vcf" not in args.input:
-        target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile, False)
+        target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile)
     else:
         target = args.target
     if "vcf" not in args.referenceLA:
-        referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile, False)
+        referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile)
     else:
         referenceLA = args.referenceLA
 
     # Se não VCF.gz, faça ser vcf.gz com index
     if "gz" not in target:
-        target = bgzip(target, args.bgzip, args.bcftools, args.begin, args.end, logFile, False)
+        target = bgzip(target, args.bgzip, args.bcftools, args.begin, args.end, logFile)
     if "gz" not in referenceLA:
-        referenceLA = bgzip(referenceLA, args.bgzip, args.bcftools, args.begin, args.end, logFile, False)
+        referenceLA = bgzip(referenceLA, args.bgzip, args.bcftools, args.begin, args.end, logFile)
 
     #Filter the reference
     referenceVCF = filterReference(referenceLA, args.correspondence, args.bcftools, f"{args.outputFolder}/Reference",
-                                   args.begin, args.end, args.threads, logFile, False)
+                                   args.begin, args.end, args.threads, logFile)
 
 
     #Merge process
     referenceVCF = normAndBiallelic(referenceVCF, f"{args.outputFolder}/Reference", args.bcftools, args.begin, args.end,
-                                    "Reference", args.fasta, args.threads, logFile, False)
+                                    "Reference", args.fasta, args.threads, logFile)
 
     targetVCF = normAndBiallelic(target, f"{args.outputFolder}/Target", args.bcftools, args.begin, args.end,
-                                 "Target", args.fasta, args.threads, logFile, False)
+                                 "Target", args.fasta, args.threads, logFile)
 
     execute(f"mkdir {args.outputFolder}/Merged", logFile)
     allSamplesVCF = mergeVCFs(referenceVCF, targetVCF, args.bcftools, f'{args.outputFolder}/Merged', args.begin,
-                              args.end, args.threads, logFile, False)
+                              args.end, args.threads, logFile)
 
     execute(f"mkdir {args.outputFolder}/Phased", logFile)
-    allSamplesPhased = phaseWithEagle(allSamplesVCF, args.referencePhase, f'{args.outputFolder}/Merged', args.begin,
+    allSamplesPhased = phaseWithEagle(allSamplesVCF, args.referencePhase, f'{args.outputFolder}/Phased', args.begin,
                               args.end, args.threads, args.geneticMap, args.eagle, logFile)
 
     execute(f"mkdir {args.outputFolder}/PLINK", logFile)
 
-    PCA = calculatePCAWithPlink(allSamplesPhased, args.plink, f'{args.outputFolder}/PLINK', args.begin,
-                                args.end, args.outputName, logFile, False)
+    PCA = calculatePCAWithPlink(targetVCF, args.plink, f'{args.outputFolder}/PLINK', args.begin,
+                                args.end, args.outputName, logFile)
+
+    setsFiles = createSets(PCA, args.setSize, f'{args.outputFolder}/PLINK', args.outputName, logFile)
