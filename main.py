@@ -1,7 +1,49 @@
 import argparse
 import os
 
-def createSets(eigenvec, setSize, outputFolder, outputName, logFile):
+def separateSets(VCF, clusteringFile, correspondence, bcftools, folder, name, begin, end, threads, logFile, run = True):
+    inputFile = open(correspondence)
+    dictRef = {}
+    dictSet = {}
+
+    for line in inputFile:
+        ID, anc = line.strip().split()
+        dictRef[ID] = anc
+    inputFile.close()
+
+    inputFile = open(clusteringFile)
+    for line in inputFile:
+        if header:
+            header = False
+        else:
+            split = line.strip().split()
+
+            if split[-1] not in dictSet:
+                dictSet[split[-1]] = []
+            dictSet[split[-1]].append(split[0])
+    inputFile.close()
+
+    maxSet = 0
+    for setSamples in dictSet:
+        if int(setSamples) > maxSet:
+            maxSet = int(setSamples)
+        fileToExtract = open(f"{folder}/ExtractSet{setSamples}.txt", 'w')
+
+        for ind in dictSet[setSamples]:
+            fileToExtract.write(f"{ind}\n")
+        for ind in dictRef:
+            fileToExtract.write(f"{ind}\n")
+        fileToExtract.close()
+        for chrom in range(begin, end + 1):
+            filterVCF(VCF, f"{folder}/ExtractSet{setSamples}.txt", bcftools, folder, f"{name}_set{setSamples}", chrom,
+                      threads, logFile, run)
+
+    return f"{name}_set{setSamples}_chr*.vcf.gz", maxSet
+
+
+
+
+def createSets(eigenvec, setSize, outputFolder, outputName, numPCs, logFile):
 
     #Code from https://stackoverflow.com/questions/5452576/k-means-algorithm-variation-with-equal-cluster-size?rq=1
     from sklearn.cluster import KMeans
@@ -10,8 +52,13 @@ def createSets(eigenvec, setSize, outputFolder, outputName, logFile):
     import numpy as np
     import pandas as pd
 
-    X = pd.read_table(eigenvec, header=None, names=['IID', 'FID', 'PC1', 'PC2'], sep=" ", index_col="IID",
-                      usecols=['IID', 'PC1', 'PC2'])
+    namesList = ['IID', 'FID']
+
+    for i in range(1, int(numPCs)+1):
+        namesList.append(f'PC{i}')
+
+    X = pd.read_table(eigenvec, header=None, names=namesList, sep=" ", index_col="IID", usecols=['IID', 'PC1', 'PC2'])
+
     n_clusters = int(np.ceil(len(X)/setSize))
     kmeans = KMeans(n_clusters)
     kmeans.fit(X)
@@ -21,11 +68,11 @@ def createSets(eigenvec, setSize, outputFolder, outputName, logFile):
     clusters = linear_sum_assignment(distance_matrix)[1]//setSize
 
     X['ClusterID'] = clusters
-    X.to_csv(f"{outputFolder}/{outputName}_PCA_Cluster.csv")
+    X.to_csv(f"{outputFolder}/{outputName}_PCA_Cluster.csv", sep = '\t')
 
     return f"{outputFolder}/{outputName}_PCA_Cluster.csv"
 
-def phaseWithEagle(allSamplesVCF, referencePhase, outputFolder, begin, end, threads, geneticMap, eagle, logFile, run = True):
+def phaseWithEagle(allSamplesVCF, referencePhase, outputFolder, begin, end, threads, geneticMap, eagle, bcftools, logFile, run = True):
     for i in range(begin, end + 1):
         samplesWithChr = allSamplesVCF.replace('*', str(i))
         vcfRefWithChr = referencePhase.replace('*', str(i))
@@ -34,15 +81,17 @@ def phaseWithEagle(allSamplesVCF, referencePhase, outputFolder, begin, end, thre
         if referencePhase != '':
             command = f'{command} --vcfRef {vcfRefWithChr} --allowRefAltSwap'
         execute(command, logFile, run)
+        execute(f"{bcftools} index {outputFolder}/Merged_Phased_{i}.vcf.gz --threads {threads}", logFile, run)
     return f'{outputFolder}/Merged_Phased_{i}.vcf.gz'
 
 
-def calculatePCAWithPlink(vcf, plink, folder, begin, end, outputName, logFile, run = True):
+def calculatePCAWithPlink(vcf, plink, folder, begin, end, outputName, numPCs, logFile, run = True):
     logFile.write(f"\n\n============================= PLINK PCA =============================\n\n")
 
     fileMerge = open(f'{folder}/ListToConcat.txt', 'w')
     for i in range(begin, end + 1):
-        execute(f"{plink} --vcf {vcf} --make-bed --out {folder}/{outputName}_chr{i}", logFile, run)
+        vcfWithChr = vcf.replace("*", str(i))
+        execute(f"{plink} --vcf {vcfWithChr} --make-bed --out {folder}/{outputName}_chr{i}", logFile, run)
         fileMerge.write(f"{folder}/{outputName}_chr{i}\n")
     fileMerge.close()
 
@@ -51,7 +100,7 @@ def calculatePCAWithPlink(vcf, plink, folder, begin, end, outputName, logFile, r
             logFile, run)
     execute(f"{plink} --bfile {folder}/{outputName}_All --extract {folder}/{outputName}_LD.prune.in --make-bed --out "
             f"{folder}/{outputName}_LD_Prunned", logFile, run)
-    execute(f"{plink} --bfile {folder}/{outputName}_LD_Prunned --pca 2 --out {folder}/{outputName}_PCA", logFile, run)
+    execute(f"{plink} --bfile {folder}/{outputName}_LD_Prunned --pca {numPCs} --out {folder}/{outputName}_PCA", logFile, run)
 
     return f'{folder}/{outputName}_PCA.eigenvec'
 
@@ -90,6 +139,13 @@ def normAndBiallelic(vcfFile, folder, bcftools, begin, end, name, fasta, thread,
     return f"{folder}/{name}_Annotated_chr*.vcf.gz"
 
 
+def filterVCF(VCF, fileToFilter, bcftools, folder, name, chrom, thread, logFile, run):
+    VCFWithChr = VCF.replace('*', str(chrom))
+    execute(f"{bcftools} view {VCFWithChr} -S {fileToFilter} -Oz -o {folder}/{name}_chr{chrom}.vcf.gz --threads {thread}",
+        logFile, run)
+    execute(f"{bcftools} index {folder}/ReferenceFiltered_chr{chrom}.vcf.gz --threads {thread}", logFile, run)
+
+
 def filterReference(reference, correspondenceList, bcftools, folder, begin, end, thread, logFile, run = True):
     logFile.write(f"\n\n============================= Filter Reference =============================\n\n")
 
@@ -103,11 +159,7 @@ def filterReference(reference, correspondenceList, bcftools, folder, begin, end,
     fileToFilter.close()
 
     for i in range(begin, end + 1):
-        referenceWithChr = reference.replace('*', str(i))
-        execute(
-            f"{bcftools} view {referenceWithChr} -S {folder}/listToKeep.txt -Oz -o {folder}/ReferenceFiltered_chr{i}.vcf.gz --threads {thread}",
-            logFile, run)
-        execute(f"{bcftools} index {folder}/ReferenceFiltered_chr{i}.vcf.gz --threads {thread}", logFile, run)
+        filterVCF(reference, f"{folder}/listToKeep.txt", bcftools, folder, "ReferenceFiltered", i, thread, logFile, run)
 
     return f"{folder}/ReferenceFiltered_chr*.vcf.gz"
 
@@ -170,6 +222,10 @@ if __name__ == '__main__':
     requiredPhasing.add_argument('-f', '--fasta', help='Fasta of genome reference (to fix REF/ALT alleles)',
                                  required=True)
 
+    requiredRegression = parser.add_argument_group("Required arguments for Regression")
+    requiredRegression.add_argument('-n', '--numPCs', help='Number of PCs to use in the regression',
+                                 required=True)
+
     programs = parser.add_argument_group("Programs")
     programs.add_argument('-E', '--eagle', help='Path to eagle', required=False, default="eagle")
     programs.add_argument('-B', '--bcftools', help='Path to bcftools', required=False, default="bcftools")
@@ -192,43 +248,48 @@ if __name__ == '__main__':
 
     # Aquecimento : mudando Bed bim fam para VCF
     if "vcf" not in args.input:
-        target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile)
+        target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile, False)
     else:
         target = args.target
     if "vcf" not in args.referenceLA:
-        referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile)
+        referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile, False)
     else:
         referenceLA = args.referenceLA
 
     # Se não VCF.gz, faça ser vcf.gz com index
     if "gz" not in target:
-        target = bgzip(target, args.bgzip, args.bcftools, args.begin, args.end, logFile)
+        target = bgzip(target, args.bgzip, args.bcftools, args.begin, args.end, logFile, False)
     if "gz" not in referenceLA:
-        referenceLA = bgzip(referenceLA, args.bgzip, args.bcftools, args.begin, args.end, logFile)
+        referenceLA = bgzip(referenceLA, args.bgzip, args.bcftools, args.begin, args.end, logFile, False)
 
     #Filter the reference
     referenceVCF = filterReference(referenceLA, args.correspondence, args.bcftools, f"{args.outputFolder}/Reference",
-                                   args.begin, args.end, args.threads, logFile)
+                                   args.begin, args.end, args.threads, logFile, False)
 
 
     #Merge process
     referenceVCF = normAndBiallelic(referenceVCF, f"{args.outputFolder}/Reference", args.bcftools, args.begin, args.end,
-                                    "Reference", args.fasta, args.threads, logFile)
+                                    "Reference", args.fasta, args.threads, logFile, False)
 
     targetVCF = normAndBiallelic(target, f"{args.outputFolder}/Target", args.bcftools, args.begin, args.end,
-                                 "Target", args.fasta, args.threads, logFile)
+                                 "Target", args.fasta, args.threads, logFile, False)
 
     execute(f"mkdir {args.outputFolder}/Merged", logFile)
     allSamplesVCF = mergeVCFs(referenceVCF, targetVCF, args.bcftools, f'{args.outputFolder}/Merged', args.begin,
-                              args.end, args.threads, logFile)
+                              args.end, args.threads, logFile, False)
 
+    #Phasing
     execute(f"mkdir {args.outputFolder}/Phased", logFile)
     allSamplesPhased = phaseWithEagle(allSamplesVCF, args.referencePhase, f'{args.outputFolder}/Phased', args.begin,
-                              args.end, args.threads, args.geneticMap, args.eagle, logFile)
+                              args.end, args.threads, args.geneticMap, args.eagle, args.bcftools, logFile, False)
 
+    #Sets
     execute(f"mkdir {args.outputFolder}/PLINK", logFile)
-
     PCA = calculatePCAWithPlink(targetVCF, args.plink, f'{args.outputFolder}/PLINK', args.begin,
-                                args.end, args.outputName, logFile)
+                                args.end, args.outputName, args.numPCs, logFile)
 
-    setsFiles = createSets(PCA, args.setSize, f'{args.outputFolder}/PLINK', args.outputName, logFile)
+    clusteringFile = createSets(PCA, args.setSize, f'{args.outputFolder}/PLINK', args.outputName, args.numPCs, logFile)
+
+    execute(f"mkdir {args.outputFolder}/Sets", logFile)
+    setVCF, numSet = separateSets(allSamplesVCF, clusteringFile, args.correspondence, args.bcftools,
+                                  f"{args.outputFolder}/Sets", args.outputName, args.begin, args.end, args.threads, logFile)
