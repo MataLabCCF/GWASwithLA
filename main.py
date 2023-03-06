@@ -1,5 +1,168 @@
 import argparse
+import gzip
+import time
 import os
+
+def splitGeneticMapByChromosome(geneticMap, folder, logFile):
+    execute(f"mkdir {folder}/GeneticMaps/", logFile)
+    if ".gz" in geneticMap:
+        inputFile = gzip.open(geneticMap)
+    else:
+        inputFile = open(geneticMap)
+
+    fileDict = {}
+
+    header = True
+    for line in inputFile:
+        line = line.decode('utf-8')
+        if header:
+            headerLine = "pos chr cM\n"
+            header = False
+        else:
+            split = line.strip().split()
+            if split[0] not in fileDict:
+                fileDict[split[0]] = open(f'{folder}/GeneticMaps/geneticMap_chr{split[0]}.txt', 'w')
+                fileDict[split[0]].write(headerLine)
+            fileDict[split[0]].write(f"{split[1]} {split[0]} {split[3]}\n")
+
+    for chrom in fileDict:
+        fileDict[chrom].close()
+
+    return f'{folder}/GeneticMaps/geneticMap_chr*.txt'
+
+
+def runRFMixSequentially(setVCF, originalVCF, numSet, begin, end, folder, name, threads, rfmix1, python2, python3, plink, VCF2RFMix,
+                         RFMix1ToRFMix2, correspondence, geneticMap, setList, logFile, run = True):
+
+    execute(f"mkdir {folder}/RFMix1_Outputs/", logFile, run)
+    execute(f"mkdir {folder}/RFMix1_Inputs/", logFile, run)
+    execute(f"mkdir {folder}/RFMix2/", logFile, run)
+
+    for chrom in range(begin, end + 1):
+        for setID in range(0, numSet+1):
+            setVCFWithNumbers = setVCF.replace("#", str(setID)).replace("*", str(chrom))
+            geneticMapWithChrom = geneticMap.replace("*", str(chrom))
+            command = f"{python3} {VCF2RFMix} -v {setVCFWithNumbers} -c {correspondence} -C {chrom} " \
+                      f"-o {folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID} -m {geneticMapWithChrom} -p {plink}"
+            execute(command, logFile, run)
+
+            alleles = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_alleles'
+            classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_classes'
+            location = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_location'
+
+            command = f"{python2} {rfmix1} PopPhased {alleles} {classes} {location} " \
+                      f"-o {folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set{setID} --num-threads {threads} -e 2 " \
+                      f"-w 0.2 --forward-backward --skip-check-input-format --succinct-output"
+            execute(command, logFile, run)
+
+        originalVCFWithChrom = originalVCF.replace("*", str(chrom))
+        FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
+        SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set0.2.SNPsPerWindow.txt'
+        classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set\*_classes'
+
+        command = f"{python3} {RFMix1ToRFMix2} -v {originalVCFWithChrom} -s {setList} " \
+                  f"-m {correspondence} -b 0 -e {numSet} -C {classes} -F {FB} -c {chrom} -g {geneticMapWithChrom} " \
+                  f"-o {folder}/RFMix2/{name}_{chrom} -S {SNPPerWindow}"
+        execute(command, logFile, run)
+
+def countFileLine(inputFile):
+    file = open(inputFile)
+    numLine = 0
+    for line in file:
+        numLine = numLine + 1
+    return numLine
+
+def readModelFile(modelFile):
+    inputFile = open(modelFile)
+    fileLines = ""
+
+    for line in inputFile:
+        fileLines = fileLines+line
+
+    return fileLines
+
+def generateListOfFlags(name, begin, end, numSet):
+    listOfFlags = []
+    for chrom in range(begin, end + 1):
+        for setID in range(0, numSet+1):
+            listOfFlags.append(f"{name}_{chrom}_{setID}.txt")
+
+    return listOfFlags
+
+def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, python2, python3, plink, VCF2RFMix,
+                RFMix1ToRFMix2, correspondence, geneticMap, setList, numJobs, queueCheck, queueSubmit, modelFile, memory,
+                cores, logFile, run = True):
+
+
+    execute(f"mkdir {folder}/RFMix1_Outputs/", logFile, run)
+    execute(f"mkdir {folder}/RFMix1_Inputs/", logFile, run)
+    execute(f"mkdir {folder}/ToSubmit/", logFile, run)
+    execute (f"rm {folder}/ToSubmit/*", logFile, run)
+    execute(f"mkdir {folder}/Flag/", logFile, run)
+    execute(f"mkdir {folder}/RFMix2/", logFile, run)
+
+
+    modelToUse = readModelFile(modelFile)
+    print(modelToUse)
+
+    allFlags = generateListOfFlags(name, begin, end, numSet)
+
+    for chrom in range(begin, end + 1):
+        for setID in range(0, numSet+1):
+            putToRun = False
+            while not putToRun:
+                time.sleep(1)
+                os.system(f'{queueCheck} > batch.txt')
+                numLine = countFileLine('batch.txt')
+
+                if numLine < numJobs:
+                    modelToSave = modelToUse.replace("%%%NAME%%%", f"LA_{chrom}_{setID}").replace("%%%MEM%%%", memory).replace("%%%CORES%%%", cores)
+                    print(modelToSave)
+                    fileToSubmit = open(f"{folder}/ToSubmit/Submission_chrom{chrom}_set{setID}.sh", 'w')
+                    fileToSubmit.write(f'{modelToSave}\n')
+
+                    setVCFWithNumbers = setVCF.replace("#", str(setID)).replace("*", str(chrom))
+                    geneticMapWithChrom = geneticMap.replace("*", str(chrom))
+                    command = f"{python3} {VCF2RFMix} -v {setVCFWithNumbers} -c {correspondence} -C {chrom} " \
+                              f"-o {folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID} -m {geneticMapWithChrom} -p {plink}"
+
+                    fileToSubmit.write(f'{command}\n')
+
+                    alleles = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_alleles'
+                    classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_classes'
+                    location = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_location'
+
+                    command = f"{python2} {rfmix1} PopPhased {alleles} {classes} {location} " \
+                              f"-o {folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set{setID} --num-threads {cores} -e 2 " \
+                              f"-w 0.2 --forward-backward --skip-check-input-format --succinct-output"
+                    fileToSubmit.write(f'{command}\n')
+                    fileToSubmit.write(f'> {folder}/Flag/{name}_{chrom}_{setID}.txt\n')
+                    fileToSubmit.close()
+                    command = f"{queueSubmit} {folder}/ToSubmit/Submission_chrom{chrom}_set{setID}.sh"
+
+                    putToRun = True
+                    execute(command, logFile, run)
+
+    allDone = False
+    while not allDone:
+        time.sleep(5)
+        folderFiles = os.listdir(f"{folder}/Flag/")
+        allDone = True
+        for flag in allFlags:
+            if flag not in folderFiles:
+                allDone = False
+
+    for chrom in range(begin, end + 1):
+        originalVCFWithChrom = originalVCF.replace("*", str(chrom))
+        FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
+        SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set0.2.SNPsPerWindow.txt'
+        classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set\*_classes'
+
+        command = f"{python3} {RFMix1ToRFMix2} -v {originalVCFWithChrom} -s {setList} " \
+                  f"-m {correspondence} -b 0 -e {numSet} -C {classes} -F {FB} -c {chrom} -g {geneticMapWithChrom} " \
+                  f"-o {folder}/RFMix2/{name}_{chrom} -S {SNPPerWindow}"
+        execute(command, logFile, run)
+
 
 def separateSets(VCF, clusteringFile, correspondence, bcftools, folder, name, begin, end, threads, logFile, run = True):
     inputFile = open(correspondence)
@@ -11,6 +174,7 @@ def separateSets(VCF, clusteringFile, correspondence, bcftools, folder, name, be
         dictRef[ID] = anc
     inputFile.close()
 
+    header = True
     inputFile = open(clusteringFile)
     for line in inputFile:
         if header:
@@ -38,7 +202,7 @@ def separateSets(VCF, clusteringFile, correspondence, bcftools, folder, name, be
             filterVCF(VCF, f"{folder}/ExtractSet{setSamples}.txt", bcftools, folder, f"{name}_set{setSamples}", chrom,
                       threads, logFile, run)
 
-    return f"{name}_set{setSamples}_chr*.vcf.gz", maxSet
+    return f"{folder}/{name}_set#_chr*.vcf.gz", maxSet, f"{folder}/ExtractSet\*.txt"
 
 
 
@@ -82,7 +246,7 @@ def phaseWithEagle(allSamplesVCF, referencePhase, outputFolder, begin, end, thre
             command = f'{command} --vcfRef {vcfRefWithChr} --allowRefAltSwap'
         execute(command, logFile, run)
         execute(f"{bcftools} index {outputFolder}/Merged_Phased_{i}.vcf.gz --threads {threads}", logFile, run)
-    return f'{outputFolder}/Merged_Phased_{i}.vcf.gz'
+    return f'{outputFolder}/Merged_Phased_*.vcf.gz'
 
 
 def calculatePCAWithPlink(vcf, plink, folder, begin, end, outputName, numPCs, logFile, run = True):
@@ -143,7 +307,7 @@ def filterVCF(VCF, fileToFilter, bcftools, folder, name, chrom, thread, logFile,
     VCFWithChr = VCF.replace('*', str(chrom))
     execute(f"{bcftools} view {VCFWithChr} -S {fileToFilter} -Oz -o {folder}/{name}_chr{chrom}.vcf.gz --threads {thread}",
         logFile, run)
-    execute(f"{bcftools} index {folder}/ReferenceFiltered_chr{chrom}.vcf.gz --threads {thread}", logFile, run)
+    execute(f"{bcftools} index {folder}/{name}_chr{chrom}.vcf.gz --threads {thread}", logFile, run)
 
 
 def filterReference(reference, correspondenceList, bcftools, folder, begin, end, thread, logFile, run = True):
@@ -218,9 +382,11 @@ if __name__ == '__main__':
                                  required=False, default='')
     requiredPhasing.add_argument('-s', '--setSize', help='Set size to run the RFMix v1 (default = 100)',
                                  required=True, default=100, type=int)
-    requiredPhasing.add_argument('-g', '--geneticMap', help='Folder with genetic maps with chromosome replaced by *', required=True)
+    requiredPhasing.add_argument('-g', '--geneticMap', help='Folder with genetic map (downloaded from Eagle website, all '
+                                                            'chromosome in the same file)', required=True)
     requiredPhasing.add_argument('-f', '--fasta', help='Fasta of genome reference (to fix REF/ALT alleles)',
                                  required=True)
+
 
     requiredRegression = parser.add_argument_group("Required arguments for Regression")
     requiredRegression.add_argument('-n', '--numPCs', help='Number of PCs to use in the regression',
@@ -232,10 +398,29 @@ if __name__ == '__main__':
     programs.add_argument('-P', '--plink', help='Path to PLINK', required=False, default="plink")
     programs.add_argument('-R', '--rfmix1', help='Path to RFMix1', required=False, default="rfmix1")
     programs.add_argument('-Z', '--bgzip', help='Path to bgzip', required=False, default="bgzip")
+    programs.add_argument('-Y', '--python3', help='Path Python3 interpreter', required=False, default="python3")
+    programs.add_argument('-y', '--python2', help='Path Python2 interpreter', required=False, default="python2")
+    programs.add_argument('-V', '--VCF2RFMix', help='Path VCF2RFMix script', required=False, default="VCF2RFMix.py")
+    programs.add_argument('-r', '--RFMix1ToRFMix2', help='Path RFMix1ToRFMix2 script', required=False, default="RFMix1ToRFMix2.py")
 
     optional = parser.add_argument_group("Optional arguments")
     optional.add_argument('-t', '--threads', help='Number of threads (default = 20)', default=20, type=int,
                           required=False)
+
+    botArgs = parser.add_argument_group("Bot Mode", description= "This mode was implemented to keep a minimun number of "
+                                                                 "jobs in the submission queue. We implemented this "
+                                                                 "feature in a slurm HPC. The goal is look the queue and "
+                                                                 "automatically add a job if the number of jobs is lower "
+                                                                 "than the requested. If not activated, our pipeline will"
+                                                                 "proceed the RFMix inference sequentially.")
+    botArgs.add_argument('-j', '--jobs', help='Activate the bot mode and set the number of jobs on the queue',
+                         required=False, default= -1, type=int)
+    botArgs.add_argument('-q', '--queueCheck', help='Queue check command', required=False, default="squeue")
+    botArgs.add_argument('-Q', '--queueSubmit', help='Command to submit a job on the queue', required=False, default="sbatch")
+    botArgs.add_argument('-m', '--model', help='Model of the submission file to be changed.', required=False)
+    botArgs.add_argument('-M', '--memory', help='Memory to be requested in the queue submission', required=False)
+    botArgs.add_argument('-C', '--cores', help='Number of cores to be requested in the queue submission', required=False)
+
 
     args = parser.parse_args()
 
@@ -291,5 +476,18 @@ if __name__ == '__main__':
     clusteringFile = createSets(PCA, args.setSize, f'{args.outputFolder}/PLINK', args.outputName, args.numPCs, logFile)
 
     execute(f"mkdir {args.outputFolder}/Sets", logFile)
-    setVCF, numSet = separateSets(allSamplesVCF, clusteringFile, args.correspondence, args.bcftools,
+    setVCF, numSet, setList = separateSets(allSamplesPhased, clusteringFile, args.correspondence, args.bcftools,
                                   f"{args.outputFolder}/Sets", args.outputName, args.begin, args.end, args.threads, logFile)
+
+    execute(f"mkdir {args.outputFolder}/RFMix", logFile)
+    geneticMapSplit = splitGeneticMapByChromosome(args.geneticMap, f"{args.outputFolder}/RFMix", logFile)
+    print(f"I have {args.jobs}")
+    if args.jobs <= 0:
+        runRFMixSequentially(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix",
+                             args.outputName, args.threads, args.rfmix1, args.python2, args.python3, args.plink,
+                             args.VCF2RFMix, args.RFMix1ToRFMix2, args.correspondence, geneticMapSplit, setList, logFile)
+    else:
+        runRFMixBot(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix", args.outputName,
+                    args.rfmix1, args.python2, args.python3, args.plink, args.VCF2RFMix, args.RFMix1ToRFMix2,
+                    args.correspondence, geneticMapSplit, setList, args.jobs, args.queueCheck, args.queueSubmit,
+                    args.model, args.memory, args.cores, logFile)
