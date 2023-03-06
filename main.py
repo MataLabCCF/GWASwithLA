@@ -433,40 +433,40 @@ if __name__ == '__main__':
 
     # Aquecimento : mudando Bed bim fam para VCF
     if "vcf" not in args.input:
-        target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile, False)
+        target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile)
     else:
         target = args.target
     if "vcf" not in args.referenceLA:
-        referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile, False)
+        referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile)
     else:
         referenceLA = args.referenceLA
 
     # Se não VCF.gz, faça ser vcf.gz com index
     if "gz" not in target:
-        target = bgzip(target, args.bgzip, args.bcftools, args.begin, args.end, logFile, False)
+        target = bgzip(target, args.bgzip, args.bcftools, args.begin, args.end, logFile)
     if "gz" not in referenceLA:
-        referenceLA = bgzip(referenceLA, args.bgzip, args.bcftools, args.begin, args.end, logFile, False)
+        referenceLA = bgzip(referenceLA, args.bgzip, args.bcftools, args.begin, args.end, logFile)
 
     #Filter the reference
     referenceVCF = filterReference(referenceLA, args.correspondence, args.bcftools, f"{args.outputFolder}/Reference",
-                                   args.begin, args.end, args.threads, logFile, False)
+                                   args.begin, args.end, args.threads, logFile)
 
 
     #Merge process
     referenceVCF = normAndBiallelic(referenceVCF, f"{args.outputFolder}/Reference", args.bcftools, args.begin, args.end,
-                                    "Reference", args.fasta, args.threads, logFile, False)
+                                    "Reference", args.fasta, args.threads, logFile)
 
     targetVCF = normAndBiallelic(target, f"{args.outputFolder}/Target", args.bcftools, args.begin, args.end,
-                                 "Target", args.fasta, args.threads, logFile, False)
+                                 "Target", args.fasta, args.threads, logFile)
 
     execute(f"mkdir {args.outputFolder}/Merged", logFile)
     allSamplesVCF = mergeVCFs(referenceVCF, targetVCF, args.bcftools, f'{args.outputFolder}/Merged', args.begin,
-                              args.end, args.threads, logFile, False)
+                              args.end, args.threads, logFile)
 
     #Phasing
     execute(f"mkdir {args.outputFolder}/Phased", logFile)
     allSamplesPhased = phaseWithEagle(allSamplesVCF, args.referencePhase, f'{args.outputFolder}/Phased', args.begin,
-                              args.end, args.threads, args.geneticMap, args.eagle, args.bcftools, logFile, False)
+                              args.end, args.threads, args.geneticMap, args.eagle, args.bcftools, logFile)
 
     #Sets
     execute(f"mkdir {args.outputFolder}/PLINK", logFile)
