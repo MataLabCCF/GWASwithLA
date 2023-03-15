@@ -489,5 +489,5 @@ if __name__ == '__main__':
     else:
         runRFMixBot(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix", args.outputName,
                     args.rfmix1, args.python2, args.python3, args.plink, args.VCF2RFMix, args.RFMix1ToRFMix2,
-                    args.correspondence, geneticMapSplit, setList, args.jobs, args.queueCheck, args.queueSubmit,
+                    args.correspondence, geneticMapSplit, setList, args.jobs, args.queueCheck, args.queueSubmit.replace("\"", ""),
                     args.model, args.memory, args.cores, logFile)
