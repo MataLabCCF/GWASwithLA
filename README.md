@@ -5,4 +5,4 @@ In construction
 
 ## Parameters 
 
-![Parameters](https://github.com/MataLabCCF/GWASwithLA/tree/master/Figures/Parameters.png)
+![Parameters](./Figures/Parameters.png?style=centerme)
