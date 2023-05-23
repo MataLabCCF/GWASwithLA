@@ -277,7 +277,10 @@ def mergeVCFs(vcf1, vcf2, bcftools, folder, begin, end, thread, logFile, run = T
 
         execute(f"{bcftools} isec -n=2 {vcf1WithChr} {vcf2WithChr} -o {folder}/CommonVariants_chr{i} --threads {thread}", logFile, run)
         execute(f"{bcftools} merge -R {folder}/CommonVariants_chr{i} {vcf1WithChr} {vcf2WithChr} -Oz "
-                f"-o {folder}/Merged_chr{i}.vcf.gz --threads {thread}", logFile, run)
+                f"-o {folder}/Merged_chr{i}.vcf.gz", logFile, run)
+
+        #execute(f"{bcftools} merge -R {folder}/CommonVariants_chr{i} {vcf1WithChr} {vcf2WithChr} -Oz "
+        #        f"-o {folder}/Merged_chr{i}.vcf.gz --threads {thread}", logFile, run)
         execute(f"{bcftools} index {folder}/Merged_chr{i}.vcf.gz --threads {thread}", logFile, run)
     return f"{folder}/Merged_chr*.vcf.gz"
 
@@ -352,7 +355,7 @@ def execute(line, logFile, run = True):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='GWAS (and maybe XWAS) with Local Ancestry')
+    parser = argparse.ArgumentParser(description='Run Local Ancestry with RFMix v1')
 
     requiredGeneral = parser.add_argument_group("Required arguments for all steps")
     requiredGeneral.add_argument('-i', '--input',
@@ -360,7 +363,6 @@ if __name__ == '__main__':
                                       'If it is PLINK file (ex.bed, ex.bim, ex.fam), put just the prefix (-i ex). '
                                       'If it is VCF, put the whole name (-i ex.vcf or ex.vcf.gz)',
                                  required=True)
-    requiredGeneral.add_argument('-I', '--inputImputed', help='Input file Imputed', required=True)
     requiredGeneral.add_argument('-o', '--outputName', help='Name of output name', required=True)
     requiredGeneral.add_argument('-O', '--outputFolder', help='Name of output folder', required=True)
     requiredGeneral.add_argument('-b', '--begin', help='First chromosome (default = 1)', default=1, type=int)
@@ -491,3 +493,5 @@ if __name__ == '__main__':
                     args.rfmix1, args.python2, args.python3, args.plink, args.VCF2RFMix, args.RFMix1ToRFMix2,
                     args.correspondence, geneticMapSplit, setList, args.jobs, args.queueCheck, args.queueSubmit.replace("\"", ""),
                     args.model, args.memory, args.cores, logFile)
+
+
