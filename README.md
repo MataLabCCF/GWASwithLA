@@ -7,21 +7,21 @@ In construction
 
 ![Parameters](./Figures/Parameters.png?style=centerme)
 
-##Preparing the data
+## Preparing the data
 
 ![Common](./Figures/mergePhaseSplit.png?style=centerme)
 
-##Local Ancestry with RFMix
+## Local Ancestry with RFMix
 
-###Sequential
+### Sequential
 
 ![Sequential](./Figures/sequential.png?style=centerme)
 
-###Bot (HPC)
+### Bot (HPC)
 
 ![Sequential](./Figures/Bot.png?style=centerme)
 
-##Command Line example
+## Command Line example
 
 ```
 python3.8 main3.py \
