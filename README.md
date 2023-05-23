@@ -15,7 +15,7 @@ In construction
 
 ### Sequential
 
-![Sequential](./Figures/sequential.png?style=centerme)
+![Sequential](./Figures/Sequential.png?style=centerme)
 
 ### Bot (HPC)
 
