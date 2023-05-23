@@ -404,6 +404,7 @@ if __name__ == '__main__':
     programs.add_argument('-y', '--python2', help='Path Python2 interpreter', required=False, default="python2")
     programs.add_argument('-V', '--VCF2RFMix', help='Path VCF2RFMix script', required=False, default="VCF2RFMix.py")
     programs.add_argument('-r', '--RFMix1ToRFMix2', help='Path RFMix1ToRFMix2 script', required=False, default="RFMix1ToRFMix2.py")
+    programs.add_argument('-A', '--AllelesRephased2VCF', help='Path allelesRephased2VCF script', required=False, default="allelesRephased2VCF.py")
 
     optional = parser.add_argument_group("Optional arguments")
     optional.add_argument('-t', '--threads', help='Number of threads (default = 20)', default=20, type=int,

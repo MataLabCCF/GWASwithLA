@@ -177,7 +177,7 @@ def getInfoFromFBLine(baseFB, ancCount, FBSplit):
     maxIndex = 1
     for j in range(baseFB+1, baseFB+ancCount):
         APP = APP + f",{FBSplit[j]}"
-        if maxProb < FBSplit[j]:
+        if float(maxProb) < float(FBSplit[j]):
             maxProb = FBSplit[j]
             maxIndex = (j-baseFB)+1
 
