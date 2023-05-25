@@ -174,6 +174,17 @@ def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, p
                   f"-o {folder}/RFMix2/{name}_{chrom} -S {SNPPerWindow}"
         execute(command, logFile, run)
 
+        FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
+        AR = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.allelesRephased.txt'
+        SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.SNPsPerWindow.txt'
+        classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set\*_classes'
+        execute(f"mkdir {folder}/VCFRephased", logFile)
+
+        setVCFWithChrom = setVCF.replace("*", str(chrom)).replace("#", "\*")
+        command = f"{python3} {allelesRephased2VCF} -v {setVCFWithChrom} -o {folder}/VCFRephased/{name}_{chrom}_Rephased.vcf " \
+                  f"-c {correspondence} -s {setList} -b 0 -e {numSet} -S {SNPPerWindow} -C {classes} -F {FB} -A {AR}"
+        execute(command, logFile, run)
+
 
 def separateSets(VCF, clusteringFile, correspondence, bcftools, folder, name, begin, end, threads, logFile, run = True):
     inputFile = open(correspondence)
