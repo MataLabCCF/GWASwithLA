@@ -195,9 +195,6 @@ if __name__ == '__main__':
     # IO
     required.add_argument('-o', '--output', help='Output prefix', required=True)  # out and VCF
 
-    # Mapping
-    required.add_argument('-m', '--mapping', help='Mapping file (format: IND POP)', required=True)  # out
-
     # Set
     required.add_argument('-c', '--correspondence', help='Correspondence between parental and IDs', required=True)
     required.add_argument('-s', '--set', help='Sets file with set number replaced by *', required=True)  # out and VCF

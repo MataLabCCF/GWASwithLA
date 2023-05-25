@@ -32,7 +32,7 @@ def splitGeneticMapByChromosome(geneticMap, folder, logFile):
 
 
 def runRFMixSequentially(setVCF, originalVCF, numSet, begin, end, folder, name, threads, rfmix1, python2, python3, plink, VCF2RFMix,
-                         RFMix1ToRFMix2, correspondence, geneticMap, setList, logFile, run = True):
+                         RFMix1ToRFMix2, correspondence, geneticMap, setList, allelesRephased2VCF, logFile, run = True):
 
     execute(f"mkdir {folder}/RFMix1_Outputs/", logFile, run)
     execute(f"mkdir {folder}/RFMix1_Inputs/", logFile, run)
@@ -65,6 +65,17 @@ def runRFMixSequentially(setVCF, originalVCF, numSet, begin, end, folder, name, 
                   f"-o {folder}/RFMix2/{name}_{chrom} -S {SNPPerWindow}"
         execute(command, logFile, run)
 
+        FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
+        AR = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.allelesRephased.txt'
+        SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.SNPsPerWindow.txt'
+        classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set\*_classes'
+        execute(f"mkdir {folder}/VCFRephased", logFile)
+
+        setVCFWithChrom = setVCF.replace("*", str(chrom)).replace("#", "\*")
+        command = f"{python3} {allelesRephased2VCF} -v {setVCFWithChrom} -o {folder}/VCFRephased/{name}_{chrom}_Rephased.vcf " \
+                  f"-c {correspondence} -s {setList} -b 0 -e {numSet} -S {SNPPerWindow} -C {classes} -F {FB} -A {AR}"
+        execute(command, logFile, run)
+
 def countFileLine(inputFile):
     file = open(inputFile)
     numLine = 0
@@ -91,7 +102,7 @@ def generateListOfFlags(name, begin, end, numSet):
 
 def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, python2, python3, plink, VCF2RFMix,
                 RFMix1ToRFMix2, correspondence, geneticMap, setList, numJobs, queueCheck, queueSubmit, modelFile, memory,
-                cores, logFile, run = True):
+                cores, allelesRephased2VCF, logFile, run = True):
 
 
     execute(f"mkdir {folder}/RFMix1_Outputs/", logFile, run)
@@ -404,7 +415,7 @@ if __name__ == '__main__':
     programs.add_argument('-y', '--python2', help='Path Python2 interpreter', required=False, default="python2")
     programs.add_argument('-V', '--VCF2RFMix', help='Path VCF2RFMix script', required=False, default="VCF2RFMix.py")
     programs.add_argument('-r', '--RFMix1ToRFMix2', help='Path RFMix1ToRFMix2 script', required=False, default="RFMix1ToRFMix2.py")
-    programs.add_argument('-A', '--AllelesRephased2VCF', help='Path allelesRephased2VCF script', required=False, default="allelesRephased2VCF.py")
+    programs.add_argument('-A', '--allelesRephased2VCF', help='Path allelesRephased2VCF script', required=False, default="allelesRephased2VCF.py")
 
     optional = parser.add_argument_group("Optional arguments")
     optional.add_argument('-t', '--threads', help='Number of threads (default = 20)', default=20, type=int,
@@ -488,11 +499,12 @@ if __name__ == '__main__':
     if args.jobs <= 0:
         runRFMixSequentially(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix",
                              args.outputName, args.threads, args.rfmix1, args.python2, args.python3, args.plink,
-                             args.VCF2RFMix, args.RFMix1ToRFMix2, args.correspondence, geneticMapSplit, setList, logFile)
+                             args.VCF2RFMix, args.RFMix1ToRFMix2, args.correspondence, geneticMapSplit, setList,
+                             args.allelesRephased2VCF, logFile)
     else:
         runRFMixBot(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix", args.outputName,
                     args.rfmix1, args.python2, args.python3, args.plink, args.VCF2RFMix, args.RFMix1ToRFMix2,
                     args.correspondence, geneticMapSplit, setList, args.jobs, args.queueCheck, args.queueSubmit.replace("\"", ""),
-                    args.model, args.memory, args.cores, logFile)
+                    args.model, args.memory, args.cores, args.allelesRephased2VCF, logFile)
 
 
