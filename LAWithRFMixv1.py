@@ -65,8 +65,10 @@ def runRFMixSequentially(setVCF, originalVCF, numSet, begin, end, folder, name, 
                   f"-o {folder}/RFMix2/{name}_{chrom} -S {SNPPerWindow}"
         execute(command, logFile, run)
 
+
+
         FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
-        AR = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.allelesRephased.txt'
+        AR = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.allelesRephased2.txt'
         SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.SNPsPerWindow.txt'
         classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set\*_classes'
         execute(f"mkdir {folder}/VCFRephased", logFile)
@@ -175,7 +177,7 @@ def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, p
         execute(command, logFile, run)
 
         FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
-        AR = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.allelesRephased.txt'
+        AR = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.allelesRephased2.txt'
         SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.SNPsPerWindow.txt'
         classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set\*_classes'
         execute(f"mkdir {folder}/VCFRephased", logFile)
