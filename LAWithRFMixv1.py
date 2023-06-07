@@ -462,7 +462,7 @@ if __name__ == '__main__':
     if "vcf" not in args.input:
         target = convertToVCF(args.input, args.plink, f'{args.outputFolder}/Target', "Target", args.begin, args.end, logFile)
     else:
-        target = args.target
+        target = args.input
     if "vcf" not in args.referenceLA:
         referenceLA = convertToVCF(args.referenceLA, args.plink, f'{args.outputFolder}/Reference', "Reference", args.begin, args.end, logFile)
     else:
