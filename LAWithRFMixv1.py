@@ -166,6 +166,7 @@ def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, p
                 allDone = False
 
     for chrom in range(begin, end + 1):
+        geneticMapWithChrom = geneticMap.replace("*", str(chrom))
         originalVCFWithChrom = originalVCF.replace("*", str(chrom))
         FB = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set\*.2.ForwardBackward.txt'
         SNPPerWindow = f'{folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set0.2.SNPsPerWindow.txt'
