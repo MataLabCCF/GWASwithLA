@@ -1,6 +1,5 @@
 import os
 import sys
-import vcfpy
 import argparse
 
 def getchar():
@@ -229,8 +228,10 @@ def convertOutputRFMixWindow(vcf, mapping, fowardBackward, output, setPrefix, cl
         marker = marker + 1 #starts on zero
         markerAll = markerAll + marker 
 
-
-        fbFinal.write(f'{chromBim}\t{bpPosition}\t{cMPosition}\t{markerAll}\t{line}')
+        if first == 0 and last == 0:
+            fbFinal.write(f'{chromBim}\t{bpPosition}\t{cMPosition}\t{markerAll}{line}')
+        else:
+            fbFinal.write(f'{chromBim}\t{bpPosition}\t{cMPosition}\t{markerAll}\t{line}')
         mspFinal.write(f'{chromBim}\t{bpPosition}\t{bpPositionLast}\t{cMPosition}\t{cMPositionLast}\t{marker}')
         
         splitLine = line.split()
@@ -251,7 +252,7 @@ def convertOutputRFMixWindow(vcf, mapping, fowardBackward, output, setPrefix, cl
 
     print(f'The final file was generated. Lets exclude the temp files (PLINK file and {output}_set{last}.fb.tsv)')
     command = f'rm {output}_gen.*'
-    #execute(command)
+    execute(command)
 
     command= f'rm {output}_set{last}.fb.tsv'
     execute(command)
