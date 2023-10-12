@@ -6,7 +6,7 @@ version = "alpha"
 
 def basicInfoVCF(ancIDPerSetDict, refID):
     string = "##fileformat=VCFv4.1\n"
-    string = string + '##FILTER=<ID=PASS,Description="All filters passed\">\"\n'
+    string = string + '##FILTER=<ID=PASS,Description="All filters passed\">\n'
     string = string + '##Ancestry IDs:'
     for id in ancIDPerSetDict[refID]:
         string = string + f' {id}:{ancIDPerSetDict[refID][id]}'
@@ -28,12 +28,14 @@ def infoVCF(ancIDPerSetDict, refID):
 
     return string
 
-def infoFormatVCF():
+def infoFormatVCF(toImpute):
     string = f'##FORMAT=<ID=GT,Number=1,Type=String,Description="Rephased genotype">\n'
-    string = string + f'##FORMAT=<ID=FA,Number=1,Type=Integer,Description="First allele ancestry">\n'
-    string = string + f'##FORMAT=<ID=SA,Number=1,Type=Integer,Description="Second allele ancestry">\n'
-    string = string + f'##FORMAT=<ID=FAPP,Number=1,Type=String,Description="First allele posteriori probability">\n'
-    string = string + f'##FORMAT=<ID=SAPP,Number=1,Type=String,Description="Second allele posteriori probability">\n'
+
+    if not toImpute:
+        string = string + f'##FORMAT=<ID=FA,Number=1,Type=Integer,Description="First allele ancestry">\n'
+        string = string + f'##FORMAT=<ID=SA,Number=1,Type=Integer,Description="Second allele ancestry">\n'
+        string = string + f'##FORMAT=<ID=FAPP,Number=1,Type=String,Description="First allele posteriori probability">\n'
+        string = string + f'##FORMAT=<ID=SAPP,Number=1,Type=String,Description="Second allele posteriori probability">\n'
 
     return string
 
@@ -212,13 +214,16 @@ if __name__ == '__main__':
                           help='forwardBackward from RFMix1 with the set number replaced by *', required=True)
 
     # Plink
-    required = parser.add_argument_group("optional arguments")
-    required.add_argument('-p', '--plink', help='Path to PLINK (default plink)', required=False, default='plink')
-    required.add_argument('-X', '--XList',
-                          help='List of individuals created by VCF2RFMix with flag -X or --Xmen with the set number replaced by *',
-                          required=False, default='')
+    optional = parser.add_argument_group("optional arguments")
+    optional.add_argument('-p', '--plink', help='Path to PLINK (default plink)', required=False, default='plink')
+    optional.add_argument('-X', '--XList', required=False, default='',
+                          help='List of individuals created by VCF2RFMix with flag -X or --Xmen with the set number replaced by *')
+    optional.add_argument('-i', '--imputation', help='This flag removes the LA information, keeping just the GT',
+                          required=False, action = "store_true", default= False)
 
     args = parser.parse_args()
+
+    toImpute = args.imputation
     rawLine = ' '.join(f'{k}={v}' for k, v in vars(args).items())
 
     correspondence = open(f'{args.correspondence}')
@@ -279,9 +284,9 @@ if __name__ == '__main__':
                     header = False
                     print("\tCreating header")
                     outputVCF.write(basicInfoVCF(ancIDPerSetDict, refID))
-                    outputVCF.write(metaInfoVCF(rawLine))
+                    #outputVCF.write(metaInfoVCF(rawLine))
                     outputVCF.write(infoVCF(ancIDPerSetDict, refID))
-                    outputVCF.write(infoFormatVCF())
+                    outputVCF.write(infoFormatVCF(toImpute))
                     outputVCF.write(headerVCF(setDict))
                     countVariants = 0
                     totalVariants = 0
@@ -336,7 +341,10 @@ if __name__ == '__main__':
 
                     alleleDict["All"] = alleleDict["All"] + 2
 
-                    sampleInfo = sampleInfo + f"\t{GT}:{FA}:{SA}:{FAPP}:{SAPP}"
+                    if toImpute:
+                        sampleInfo = sampleInfo + f"\t{GT}"
+                    else:
+                        sampleInfo = sampleInfo + f"\t{GT}:{FA}:{SA}:{FAPP}:{SAPP}"
 
                 AF = "{:.3f}".format(alleleDict["Alt"]/alleleDict["All"])
                 infoLine= f"AF={AF};COUNT={alleleDict['Alt']}"
@@ -347,7 +355,10 @@ if __name__ == '__main__':
                     else:
                         infoLine = infoLine + f";COUNT_{i}=NA;AF_{i}=NA"
 
-                outputVCF.write(f"{infoLine}\tGT:FA:SA:FAPP:SAPP{sampleInfo}\n")
+                if toImpute:
+                    outputVCF.write(f"{infoLine}\tGT{sampleInfo}\n")
+                else:
+                    outputVCF.write(f"{infoLine}\tGT:FA:SA:FAPP:SAPP{sampleInfo}\n")
                 countVariants = countVariants - 1
                 totalVariants = totalVariants + 1
 
