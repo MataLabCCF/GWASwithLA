@@ -36,3 +36,11 @@ python3.8 main3.py \
 -m /home/peixott/beegfs/Analysis/LocalAncestry/modelScript.sh \
 -j 20 -q squeue -Q sbatch -M 90G -C 24
 ```
+## Contact
+
+If you chat about this on going project, please sent an email to me
+
+Thiago Peixoto Leal, PhD
+
+Email: PEIXOTT@ccf.org
+
