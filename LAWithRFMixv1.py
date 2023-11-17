@@ -32,7 +32,7 @@ def splitGeneticMapByChromosome(geneticMap, folder, logFile):
 
 
 def runRFMixSequentially(setVCF, originalVCF, numSet, begin, end, folder, name, threads, rfmix1, python2, python3, plink, VCF2RFMix,
-                         RFMix1ToRFMix2, correspondence, geneticMap, setList, allelesRephased2VCF, logFile, run = True):
+                         RFMix1ToRFMix2, correspondence, geneticMap, setList, allelesRephased2VCF, doNotRephase, logFile, run = True):
 
     execute(f"mkdir {folder}/RFMix1_Outputs/", logFile, run)
     execute(f"mkdir {folder}/RFMix1_Inputs/", logFile, run)
@@ -50,7 +50,11 @@ def runRFMixSequentially(setVCF, originalVCF, numSet, begin, end, folder, name, 
             classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_classes'
             location = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_location'
 
-            command = f"{python2} {rfmix1} PopPhased {alleles} {classes} {location} " \
+            type = "PopPhased"
+            if doNotRephase:
+                type = "TrioPhased"
+
+            command = f"{python2} {rfmix1} {type} {alleles} {classes} {location} " \
                       f"-o {folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set{setID} --num-threads {threads} -e 2 " \
                       f"-w 0.2 --forward-backward --skip-check-input-format --succinct-output"
             execute(command, logFile, run)
@@ -104,7 +108,7 @@ def generateListOfFlags(name, begin, end, numSet):
 
 def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, python2, python3, plink, VCF2RFMix,
                 RFMix1ToRFMix2, correspondence, geneticMap, setList, numJobs, queueCheck, queueSubmit, modelFile, memory,
-                cores, allelesRephased2VCF, logFile, run = True):
+                cores, allelesRephased2VCF, doNotRephase, logFile, run = True):
 
 
     execute(f"mkdir {folder}/RFMix1_Outputs/", logFile, run)
@@ -145,7 +149,11 @@ def runRFMixBot(setVCF, originalVCF, numSet, begin, end, folder, name, rfmix1, p
                     classes = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_classes'
                     location = f'{folder}/RFMix1_Inputs/{name}_chrom{chrom}_set{setID}_location'
 
-                    command = f"{python2} {rfmix1} PopPhased {alleles} {classes} {location} " \
+                    type = "PopPhased"
+                    if doNotRephase:
+                        type = "TrioPhased"
+
+                    command = f"{python2} {rfmix1} {type} {alleles} {classes} {location} " \
                               f"-o {folder}/RFMix1_Outputs/Output_{name}_chrom{chrom}_set{setID} --num-threads {cores} -e 2 " \
                               f"-w 0.2 --forward-backward --skip-check-input-format --succinct-output"
                     fileToSubmit.write(f'{command}\n')
@@ -280,7 +288,7 @@ def calculatePCAWithPlink(vcf, plink, folder, begin, end, outputName, numPCs, lo
     fileMerge = open(f'{folder}/ListToConcat.txt', 'w')
     for i in range(begin, end + 1):
         vcfWithChr = vcf.replace("*", str(i))
-        execute(f"{plink} --vcf {vcfWithChr} --make-bed --out {folder}/{outputName}_chr{i}", logFile, run)
+        execute(f"{plink} --vcf {vcfWithChr} --double-id --make-bed --out {folder}/{outputName}_chr{i}", logFile, run)
         fileMerge.write(f"{folder}/{outputName}_chr{i}\n")
     fileMerge.close()
 
@@ -434,6 +442,7 @@ if __name__ == '__main__':
     optional = parser.add_argument_group("Optional arguments")
     optional.add_argument('-t', '--threads', help='Number of threads (default = 20)', default=20, type=int,
                           required=False)
+    optional.add_argument('-d', '--doNotRephase', help='Do not rephase using RFMix v1', default=False, action="store_true")
 
     botArgs = parser.add_argument_group("Bot Mode", description= "This mode was implemented to keep a minimun number of "
                                                                  "jobs in the submission queue. We implemented this "
@@ -492,9 +501,13 @@ if __name__ == '__main__':
                               args.end, args.threads, logFile)
 
     #Phasing
-    execute(f"mkdir {args.outputFolder}/Phased", logFile)
-    allSamplesPhased = phaseWithEagle(allSamplesVCF, args.referencePhase, f'{args.outputFolder}/Phased', args.begin,
-                              args.end, args.threads, args.geneticMap, args.eagle, args.bcftools, logFile)
+
+    if not args.doNotRephase:
+        execute(f"mkdir {args.outputFolder}/Phased", logFile)
+        allSamplesPhased = phaseWithEagle(allSamplesVCF, args.referencePhase, f'{args.outputFolder}/Phased', args.begin,
+                                  args.end, args.threads, args.geneticMap, args.eagle, args.bcftools, logFile)
+    else:
+        allSamplesPhased = allSamplesVCF
 
     #Sets
     execute(f"mkdir {args.outputFolder}/PLINK", logFile)
@@ -514,11 +527,11 @@ if __name__ == '__main__':
         runRFMixSequentially(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix",
                              args.outputName, args.threads, args.rfmix1, args.python2, args.python3, args.plink,
                              args.VCF2RFMix, args.RFMix1ToRFMix2, args.correspondence, geneticMapSplit, setList,
-                             args.allelesRephased2VCF, logFile)
+                             args.allelesRephased2VCF, args.doNotRephase, logFile)
     else:
         runRFMixBot(setVCF, allSamplesPhased, numSet, args.begin, args.end, f"{args.outputFolder}/RFMix", args.outputName,
                     args.rfmix1, args.python2, args.python3, args.plink, args.VCF2RFMix, args.RFMix1ToRFMix2,
                     args.correspondence, geneticMapSplit, setList, args.jobs, args.queueCheck, args.queueSubmit.replace("\"", ""),
-                    args.model, args.memory, args.cores, args.allelesRephased2VCF, logFile)
+                    args.model, args.memory, args.cores, args.allelesRephased2VCF, args.doNotRephase, logFile)
 
 

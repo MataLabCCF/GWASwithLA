@@ -28,7 +28,7 @@ def infoVCF(ancIDPerSetDict, refID):
 
     return string
 
-def infoFormatVCF(toImpute):
+def infoFormatVCF(ancIDPerSetDict, refID, toImpute):
     string = f'##FORMAT=<ID=GT,Number=1,Type=String,Description="Rephased genotype">\n'
 
     if not toImpute:
@@ -36,6 +36,8 @@ def infoFormatVCF(toImpute):
         string = string + f'##FORMAT=<ID=SA,Number=1,Type=Integer,Description="Second allele ancestry">\n'
         string = string + f'##FORMAT=<ID=FAPP,Number=1,Type=String,Description="First allele posteriori probability">\n'
         string = string + f'##FORMAT=<ID=SAPP,Number=1,Type=String,Description="Second allele posteriori probability">\n'
+        for anc in ancIDPerSetDict[refID]:
+            string = string + f'##FORMAT=<ID=DS{anc},Number=1,Type=Float,Description="Dosage for ID {anc} ({ancIDPerSetDict[refID][anc]}) ancestry">\n'
 
     return string
 
@@ -286,7 +288,7 @@ if __name__ == '__main__':
                     outputVCF.write(basicInfoVCF(ancIDPerSetDict, refID))
                     #outputVCF.write(metaInfoVCF(rawLine))
                     outputVCF.write(infoVCF(ancIDPerSetDict, refID))
-                    outputVCF.write(infoFormatVCF(toImpute))
+                    outputVCF.write(infoFormatVCF(ancIDPerSetDict, refID, toImpute))
                     outputVCF.write(headerVCF(setDict))
                     countVariants = 0
                     totalVariants = 0
@@ -333,6 +335,16 @@ if __name__ == '__main__':
 
                     # Get Second ancestry and Posteriori probabilities related to them
                     SA, SAPP = getInfoFromFBLine(baseFB + ancCount, ancCount, FBSplit)
+
+
+                    dosagesList = []
+                    splitFAAP = FAPP.split(",")
+                    splitSAAP = SAPP.split(",")
+
+                    for i in range(len(splitFAAP)):
+                        dosagesList.append(float(splitFAAP[i])+ float(splitSAAP[i]))
+
+
                     # Count Ref and All alleles for second ancestry
                     if str(allRephased[baseRephased+1]) == "1":
                         alleleDict["Alt"] = alleleDict["Alt"]+1
@@ -345,6 +357,12 @@ if __name__ == '__main__':
                         sampleInfo = sampleInfo + f"\t{GT}"
                     else:
                         sampleInfo = sampleInfo + f"\t{GT}:{FA}:{SA}:{FAPP}:{SAPP}"
+                        count = 1
+                        formatDosage = ""
+                        for dosage in dosagesList:
+                            sampleInfo = sampleInfo + f":{dosage}"
+                            formatDosage = formatDosage + f":DS{count}"
+                            count = count + 1
 
                 AF = "{:.3f}".format(alleleDict["Alt"]/alleleDict["All"])
                 infoLine= f"AF={AF};COUNT={alleleDict['Alt']}"
@@ -358,7 +376,7 @@ if __name__ == '__main__':
                 if toImpute:
                     outputVCF.write(f"{infoLine}\tGT{sampleInfo}\n")
                 else:
-                    outputVCF.write(f"{infoLine}\tGT:FA:SA:FAPP:SAPP{sampleInfo}\n")
+                    outputVCF.write(f"{infoLine}\tGT:FA:SA:FAPP:SAPP{formatDosage}{sampleInfo}\n")
                 countVariants = countVariants - 1
                 totalVariants = totalVariants + 1
 
