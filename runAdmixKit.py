@@ -24,7 +24,7 @@ def getWindow(position, dictWindow):
                 break
             # Case 2: it is between 2 windows -> give the closer window
             elif dictWindow[index]["End"] <= position <= dictWindow[index + 1]["Begin"]:
-                if (dictWindow[index]["End"] - position) ** 2 < (position - dictWindow[index + 1]["Begin"]):
+                if (dictWindow[index]["End"] - position) ** 2 < (position - dictWindow[index + 1]["Begin"]) ** 2:
                     window = index
                 else:
                     window = index + 1
@@ -35,7 +35,7 @@ def getWindow(position, dictWindow):
     return window
 
 def createLancFile(VCF, MSP, folder, name, begin, end):
-    for chrom in range(begin, end):
+    for chrom in range(begin, end+1):
 
         MSPFile = open(MSP)
 
@@ -49,9 +49,9 @@ def createLancFile(VCF, MSP, folder, name, begin, end):
             if lineCount == 0:
                 print(f"Header : {line}")
             elif lineCount == 1:
-                header = line.strip().split()
+                header = line.strip().split("\t")
             else:
-                split = line.strip().split()
+                split = line.strip().split("\t")
                 dictWindow.append({"Begin" : int(split[1]), "End" : int(split[2])})
 
                 for i in range(6, len(split), 2):
@@ -61,6 +61,10 @@ def createLancFile(VCF, MSP, folder, name, begin, end):
                     dictAnc[ind][windowCount] = f"{split[i]}{split[i+1]}"
                 windowCount = windowCount + 1
             lineCount = lineCount + 1
+
+        windowCount = windowCount-1
+        print (dictAnc[ind][windowCount])
+        #input(dictAnc)
 
         gzFile = False
         if ".gz" in VCF:
@@ -79,16 +83,24 @@ def createLancFile(VCF, MSP, folder, name, begin, end):
             if headerFlag:
                 if "#CHROM" in line:
                     header = line.strip().split()
+                    input(header)
                     headerFlag = False
                     lineCount = 0
             else:
+                split = line.strip().split()
                 lineCount = lineCount+1
-                window = getWindow(split[1], dictWindow)
+                window = getWindow(int(split[1]), dictWindow)
                 numInd = 0
+
+                if lineCount % 10000 == 0:
+                    print(f"{split[1]} - {window}")
+
                 for i in range(9, len(split)):
                     numInd = numInd + 1
                     ind = header[i]
 
+                    if window == -1:
+                        window  = windowCount
                     anc = dictAnc[ind][window]
 
                     if ind not in dictToLancFile:
@@ -99,6 +111,8 @@ def createLancFile(VCF, MSP, folder, name, begin, end):
                         if anc != dictToLancFile[ind]["last"]:
                             dictToLancFile[ind]["toFile"] = f"{lineCount}:{dictToLancFile[ind]['last']} "
                             dictToLancFile[ind]["last"] = anc
+
+
 
         lancFile = open(f"{folder}/{name}_chr{chrom}.lanc", "w")
         lancFile.write(f"{lineCount} {numInd}\n")
