@@ -1,5 +1,6 @@
 # GWASwithLA
 
+## DO NOT USE THIE PIPELINE DUE TO BATCH EFFECT RISK. 
 In construction
 
 
